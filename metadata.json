@@ -1,0 +1,5 @@
+{
+  "name": "StockInsight Pro",
+  "description": "Professional real-time stock market terminal with Dashboard, Watchlist, Advanced Analysis, and Admin Management. Features AI-powered sentiment analysis and real-time data visualization.",
+  "requestFramePermissions": []
+}
