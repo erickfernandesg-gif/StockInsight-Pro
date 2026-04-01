@@ -19,8 +19,9 @@ export async function GET() {
         : Promise.resolve(null),
       
       // 2. Busca Dólar na Brapi (requisição individual)
+      // 2. Busca Dólar na Brapi (requisição individual)
       token
-        ? fetch(`https://brapi.dev/api/quote/USDBRL?token=${token}`, { next: { revalidate: 60 } }).then(res => res.json())
+        ? fetch(`https://brapi.dev/api/quote/USDBRL=X?token=${token}`, { next: { revalidate: 60 } }).then(res => res.json())
         : Promise.resolve(null),
 
       // 3. AwesomeAPI como fallback robusto para o Dólar
