@@ -105,3 +105,38 @@ on public.user_favorites
 for all 
 using (auth.uid() = user_id);
   commit;
+
+  CREATE TABLE market_cache (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Habilita segurança, mas permite que o seu servidor leia e grave nela
+ALTER TABLE market_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir acesso anonimo" ON market_cache FOR ALL USING (true) WITH CHECK (true);
+
+-- 1. Criar a Tabela de Histórico (trade_history) que estava faltando
+CREATE TABLE IF NOT EXISTS public.trade_history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  ticker TEXT NOT NULL,
+  quantity NUMERIC NOT NULL,
+  buy_price NUMERIC NOT NULL,
+  sell_price NUMERIC NOT NULL,
+  profit NUMERIC NOT NULL,
+  profit_percent NUMERIC NOT NULL,
+  purchase_date TIMESTAMP WITH TIME ZONE,
+  close_date TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2. Habilitar Segurança (RLS) no Histórico
+ALTER TABLE public.trade_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their trade history"
+  ON public.trade_history FOR ALL
+  USING (auth.uid() = user_id);
+
+-- 3. Prevenir linhas duplicadas do mesmo ativo na carteira aberta
+-- Isso garante que a nossa lógica de atualização de Preço Médio não falhe
+ALTER TABLE public.user_portfolio ADD CONSTRAINT user_portfolio_user_id_ticker_key UNIQUE (user_id, ticker);

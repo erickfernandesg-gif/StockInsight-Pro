@@ -111,26 +111,74 @@ export default function PortfolioPage() {
     }
   }, [assetToClose, assetsData]);
 
+  // LÓGICA DE PREÇO MÉDIO IMPLEMENTADA AQUI
   const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from('user_portfolio').insert({
-      user_id: user.id,
-      ticker: newAsset.ticker.toUpperCase().trim(),
-      quantity: parseFloat(newAsset.quantity),
-      average_price: parseFloat(newAsset.price.replace(',', '.'))
-    });
+    const tickerToAdd = newAsset.ticker.toUpperCase().trim();
+    const quantityToAdd = parseFloat(newAsset.quantity);
+    const pricePaid = parseFloat(newAsset.price.replace(',', '.'));
 
-    if (!error) {
-      setIsModalOpen(false);
-      setNewAsset({ ticker: '', quantity: '', price: '' });
-      fetchPortfolio();
+    // 1. Verifica se o usuário já tem esse ativo na carteira
+    const { data: existingAsset, error: fetchError } = await supabase
+      .from('user_portfolio')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('ticker', tickerToAdd)
+      .maybeSingle();
+
+    if (existingAsset) {
+      // 2. O Ativo JÁ EXISTE. Vamos calcular o novo Preço Médio!
+      const currentQty = existingAsset.quantity;
+      const currentAvgPrice = existingAsset.average_price;
+
+      // Matemática Financeira: Média Ponderada
+      const totalInvestedBefore = currentQty * currentAvgPrice;
+      const newInvestmentAmount = quantityToAdd * pricePaid;
+      
+      const newTotalQuantity = currentQty + quantityToAdd;
+      const newAveragePrice = (totalInvestedBefore + newInvestmentAmount) / newTotalQuantity;
+
+      const { error: updateError } = await supabase
+        .from('user_portfolio')
+        .update({
+          quantity: newTotalQuantity,
+          average_price: newAveragePrice,
+          purchase_date: new Date().toISOString() // Atualiza a data do último aporte
+        })
+        .eq('id', existingAsset.id);
+
+      if (updateError) {
+        alert("Erro ao recalcular preço médio: " + updateError.message);
+      } else {
+        setIsModalOpen(false);
+        setNewAsset({ ticker: '', quantity: '', price: '' });
+        fetchPortfolio();
+      }
+
     } else {
-      alert("Erro ao guardar: " + error.message);
+      // 3. O Ativo NÃO EXISTE. Insere uma posição nova.
+      const { error: insertError } = await supabase
+        .from('user_portfolio')
+        .insert({
+          user_id: user.id,
+          ticker: tickerToAdd,
+          quantity: quantityToAdd,
+          average_price: pricePaid
+        });
+
+      if (!insertError) {
+        setIsModalOpen(false);
+        setNewAsset({ ticker: '', quantity: '', price: '' });
+        fetchPortfolio();
+      } else {
+        alert("Erro ao guardar: " + insertError.message);
+      }
     }
+    
     setIsSaving(false);
   };
 
@@ -422,13 +470,13 @@ export default function PortfolioPage() {
                       <input required type="number" step="1" min="1" value={newAsset.quantity} onChange={e => setNewAsset({...newAsset, quantity: e.target.value})} className="w-full bg-background-dark border border-border-dark rounded-xl py-3 px-4 text-white font-mono outline-none focus:ring-2 focus:ring-primary/50 transition-all" placeholder="100" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Preço Médio (R$)</label>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Preço Pago (R$)</label>
                       <input required type="number" step="0.01" min="0.01" value={newAsset.price} onChange={e => setNewAsset({...newAsset, price: e.target.value})} className="w-full bg-background-dark border border-border-dark rounded-xl py-3 px-4 text-white font-mono outline-none focus:ring-2 focus:ring-primary/50 transition-all" placeholder="32.50" />
                     </div>
                   </div>
                   <button disabled={isSaving} type="submit" className="w-full bg-primary text-background-dark font-black py-4 rounded-xl mt-6 uppercase tracking-widest text-xs hover:brightness-110 transition-all flex justify-center items-center gap-2">
                     {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    {isSaving ? 'Salvando...' : 'Registar Compra'}
+                    {isSaving ? 'Calculando e Salvando...' : 'Registar Compra'}
                   </button>
                 </form>
               </motion.div>
@@ -447,7 +495,7 @@ export default function PortfolioPage() {
                 
                 <form onSubmit={handleClosePosition} className="space-y-5">
                   <div className="bg-background-dark border border-border-dark p-4 rounded-xl text-center mb-4">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Custo de Entrada</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Preço Médio Atual</p>
                     <p className="text-lg font-mono text-slate-300">{formatBRL(assetToClose.average_price)}</p>
                   </div>
 
@@ -471,7 +519,7 @@ export default function PortfolioPage() {
           )}
         </AnimatePresence>
 
-        {/* Modal Genérico de Exclusão (Para Erros/Testes) */}
+        {/* Modal Genérico de Exclusão */}
         <AnimatePresence>
           {(assetToDelete || historyToDelete) && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background-dark/80 backdrop-blur-sm">
