@@ -140,3 +140,6 @@ CREATE POLICY "Users can manage their trade history"
 -- 3. Prevenir linhas duplicadas do mesmo ativo na carteira aberta
 -- Isso garante que a nossa lógica de atualização de Preço Médio não falhe
 ALTER TABLE public.user_portfolio ADD CONSTRAINT user_portfolio_user_id_ticker_key UNIQUE (user_id, ticker);
+
+-- Adicionar a coluna de percentagem alvo à tabela de portfólio
+ALTER TABLE public.user_portfolio ADD COLUMN IF NOT EXISTS target_percent NUMERIC DEFAULT 0;
