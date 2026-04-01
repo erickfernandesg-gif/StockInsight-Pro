@@ -5,6 +5,11 @@ import { ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 function Sparkline({ data, isPositive }: { data: number[], isPositive: boolean }) {
+  // CÓDIGO DEFENSIVO: Se 'data' não existir ou não for um array com itens, não tenta desenhar
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return <div className="w-24 h-8 bg-slate-800/20 rounded animate-pulse" />;
+  }
+
   const points = data.map((val, i) => `${(i / (data.length - 1)) * 100},${100 - val}`).join(' ');
   return (
     <div className="w-24 h-8">
