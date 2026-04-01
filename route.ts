@@ -12,25 +12,36 @@ export async function GET() {
   }
 
   try {
-    // 1. Buscando Cotações (Ibovespa e Dólar) na Brapi (Crítico)
-    const quotesRes = await fetch(
-      `https://brapi.dev/api/quote/^BVSP,USDBRL?token=${token}`,
-      { next: { revalidate: 60 } } // Cache de 60 segundos
-    );
+    // 1. Buscando Cotações Individualmente para respeitar o limite do plano da Brapi
+    const [ibovRes, usdRes] = await Promise.allSettled([
+      fetch(`https://brapi.dev/api/quote/^BVSP?token=${token}`, { next: { revalidate: 60 } }),
+      fetch(`https://brapi.dev/api/quote/USDBRL?token=${token}`, { next: { revalidate: 60 } })
+    ]);
 
-    if (!quotesRes.ok) {
-      throw new Error(`Brapi API Error: ${quotesRes.status} ${quotesRes.statusText}`);
+    const results: any[] = [];
+
+    // Processa o resultado do Ibovespa
+    if (ibovRes.status === 'fulfilled' && ibovRes.value.ok) {
+      const data = await ibovRes.value.json();
+      if (data.results?.[0]) results.push(data.results[0]);
     }
 
-    const quotesData = await quotesRes.json();
-    
-    // Verificação de segurança: garante que results existe e é um array
-    if (!quotesData.results || !Array.isArray(quotesData.results)) {
-      console.error('Brapi Response inválida:', quotesData);
-      throw new Error('Retorno inválido da Brapi. Verifique o token.');
+    // Processa o resultado do Dólar
+    if (usdRes.status === 'fulfilled' && usdRes.value.ok) {
+      const data = await usdRes.value.json();
+      if (data.results?.[0]) results.push(data.results[0]);
     }
 
-    const marketData = quotesData.results.map((item: any) => ({
+    // Se não conseguiu nenhum dado, lança um erro
+    if (results.length === 0) {
+      // Tenta identificar qual falhou para um log mais específico
+      const ibovError = ibovRes.status === 'rejected' ? ibovRes.reason : (ibovRes.status === 'fulfilled' && !ibovRes.value.ok ? `HTTP Error: ${ibovRes.value.status}` : 'No data');
+      const usdError = usdRes.status === 'rejected' ? usdRes.reason : (usdRes.status === 'fulfilled' && !usdRes.value.ok ? `HTTP Error: ${usdRes.value.status}` : 'No data');
+      console.error(`Falha ao obter dados da Brapi. IBOV: ${ibovError}, USD: ${usdError}`);
+      throw new Error('Falha ao obter dados da Brapi. Verifique o limite de requisições ou token.');
+    }
+
+    const marketData = results.map((item: any) => ({
       ticker: item.symbol,
       price: item.regularMarketPrice,
       changePercent: item.regularMarketChangePercent,
